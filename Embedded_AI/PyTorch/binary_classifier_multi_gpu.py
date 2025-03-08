@@ -87,7 +87,7 @@ def setup(rank, world_size):
 
 def train(rank, world_size, train_dataset, test_dataset, n_epochs=10, batch_size=100):
     # Initialzation
-    setup()
+    setup(rank, world_size)
     # Create distributed dataloader 
     distributed_train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank)
     train_loader = DataLoader(dataset = train_dataset, batch_size=batch_size, sampler=distributed_train_sampler)

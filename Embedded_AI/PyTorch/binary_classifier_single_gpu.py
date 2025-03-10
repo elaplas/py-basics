@@ -101,19 +101,22 @@ sample_input = torch.randint(-5, 5, (1, 2)).float() # Type and shape of sample i
 model_path = "./binary_classifier.onnx"
 torch.onnx.export(model, sample_input, model_path, input_names=["input"], output_names=["output"])
 
+# Set provider
+providers = ["CUDAExecutionProvider"] if torch.cuda.is_available() else ["CPUExecutionProvider"]
+
 # Instantiate and config inference session
-ort_session = onnxrt.InferenceSession(model_path)
+ort_session = onnxrt.InferenceSession(model_path, providers = providers)
 
 # Inferencing samples one-by-one
 inf_res = []
 for i in range(x_test.size()[0]):
-    x_i = x_test.numpy()[i].reshape(1,2)
+    x_i = x_test.cpu().numpy()[i].reshape(1,2)
     outputs_i = ort_session.run(None, {"input": x_i})
     inf_res.append(outputs_i[0].tolist())
 
-inf_acc = cal_accuracy(torch.tensor(inf_res), y_test)
+inf_acc = cal_accuracy(torch.tensor(inf_res, device=device), y_test)
 print(".................")
-print(f"inference accuracy: {cal_accuracy(torch.tensor(inf_res), y_test)}")
+print(f"inference accuracy: {inf_acc}")
 
 
 # CUDA Optimization Explained
@@ -136,6 +139,24 @@ print(f"inference accuracy: {cal_accuracy(torch.tensor(inf_res), y_test)}")
 # PyTorch executes operations asynchronously on GPUs, meaning computations are queued and executed in parallel without waiting for previous operations to finish.
 # No manual parallelization is required—PyTorch automatically optimizes memory transfers and execution order.
 
+# Inferencing on GPU
+# By default, ONNX Runtime always places input(s) and output(s) on CPU unless explicitly bound to GPU memory
+# Inputs/outputs can be moved on GPU with IO binding
+
+# An example of binding
+# Prepare input/output OrtValues on GPU
+
+##### x_ort = ort.OrtValue.ortvalue_from_numpy(x_i, 'cuda', 0)
+##### output_ort = ort.OrtValue.ortvalue_from_shape([1, 1], np.float32, 'cuda', 0)
+##### 
+##### # Bind and run
+##### io_binding = ort_session.io_binding()
+##### io_binding.bind_input('input', x_ort.device_name(), 0, np.float32, x_ort.shape(), x_ort.data_ptr())
+##### io_binding.bind_output('output', output_ort.device_name(), 0, np.float32, output_ort.shape(), output_ort.data_ptr())
+##### ort_session.run_with_iobinding(io_binding)
+##### 
+##### # Access output on GPU without CPU copy
+##### gpu_output = io_binding.get_outputs()[0]
 
 
 

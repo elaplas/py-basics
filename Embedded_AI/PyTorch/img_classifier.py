@@ -7,7 +7,9 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader, random_split
 from torchsummary import summary
 
-
+###
+### This classifier reaches around 85% accuracy with less than 100k trainable parameters
+###
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Training parameters

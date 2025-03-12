@@ -97,7 +97,7 @@ for epoch in range(n_epochs):
         print(f"validation accuracy: {cal_accuracy(prediction_test, y_test)}")
 
 # Export to onnx format 
-sample_input = torch.randint(-5, 5, (1, 2)).float() # Type and shape of sample input is decisive
+sample_input = torch.randint(-5, 5, (1, 2)).float().to(device) # Type and shape of sample input is decisive
 model_path = "./binary_classifier.onnx"
 torch.onnx.export(model, sample_input, model_path, input_names=["input"], output_names=["output"])
 

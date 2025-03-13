@@ -8,8 +8,14 @@ from torch.utils.data import Dataset, DataLoader, random_split
 from torchsummary import summary
 
 ###
-### This classifier reaches around 85% accuracy with less than 100k trainable parameters
+### This classifier (resnet34 inspired) reaches around ... accuracy with less than ... trainable parameters
+### Hint: In resnet, a block of two residual layers containing two conv3x3 with stride=n and padding =1 and 
+### a shortcut is followed by another block of two residual layers and this patterns is repeated.
+### The n for stride=n in residual layer is not set to 1 after each 6 residual layers to reducce 2D dimesions (hxw) by n.
+### In n for stride=n is not set to 1, the first conv layer of the next residual doubles the number of output 
+### channels to compensate for the reduced hxw dimensions. 
 ###
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Training parameters
@@ -29,6 +35,28 @@ test_dataset = torchvision.datasets.FashionMNIST(root="./fashionmnist_data", tra
 print(test_dataset)
 train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, num_workers=4)
 test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, num_workers=4)
+
+class ResidualBlock(nn.module):
+    def __init__(self, in_channels, out_channels, stride=1):
+        super().__init__()
+        self.cov1 = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=stride, padding=1)
+        self.cov2 = nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.shortcut = nn.Sequential()
+        # To addapt input either channel numbers or hxw dimenstions 
+        if in_channels != out_channels or stride!=1:
+            self.shortcut = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=stride, padding=0)
+
+    def forward(self, x):
+        y = self.cov1(x)
+        y = self.cov2(y)
+        y = self.shortcut(x) + y
+        y = self.bn((nn.ReLU(y)))
+        return y
+    
+    def __call__(self, x):
+        return self.forward(x)
+
 
 class Classifier(nn.Module):
     def __init__(self, num_classes):

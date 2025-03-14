@@ -8,11 +8,8 @@ from torch.utils.data import Dataset, DataLoader, random_split
 from torchsummary import summary
 
 ###
-### This classifier (vgg16 inspired) reaches around 85% accuracy with less than 180k trainable parameters
-### Hint: In VGG, a block of two or four conv3x3 with stride=1 and padding =1 keeping the input and output dimensions 
-### the same is followed by a pooling layer with stride=2 and padding=0 reducing 2D dimesions (hxw) by 2.
-### After pooing layer, the first conv layer of the next conv block doubles the number of output channels to 
-### compensate for the reduced hxw dimensions. 
+### This classifier (vgg16 inspired) with squeeze-and-excitation layer (channel attention)
+### Important channels are amplified, less useful ones suppressed 
 ### 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -34,6 +31,44 @@ print(test_dataset)
 train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, num_workers=4)
 test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, num_workers=4)
 
+class ChannelAttention(nn.Module):
+    """
+    Input: Feature map tensor of shape (B, C, H, W)
+    Output: Attention-weighted feature map of same dimensions
+    Squeeze Phase (Global Information)
+    Uses AdaptiveAvgPool2d(1) to reduce spatial dimensions to 1x1:
+    (B, C, H, W) → (B, C, 1, 1)
+    Captures global context by averaging across spatial dimensions
+    Excitation Phase (Channel Relationships)
+    Squeezed features are fed through two fully connected layers:
+    First FC reduces dimensionality by reduction ratio (e.g., 16:1)
+    Second FC restores original channel count
+    Sigmoid activation produces channel-wise attention weights between 0-1
+    Feature Recalibration
+    Original feature map is multiplied by attention weights:
+    x * y.expand_as(x)
+    Important channels are amplified, less useful ones suppressed, so
+    it can be used to select relevant channels for each head/task in multi-task networks
+    """
+    def __init__(self, channels, reduction=2):
+        super().__init__()
+        self.fc = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(), 
+            nn.Linear(channels, channels//reduction),
+            nn.Linear(channels//reduction, channels),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        y = self.fc(x)
+        x = x * y.view(y.size()[0], y.size()[1],1,1).expand_as(x)
+        return x
+    
+    def __call__(self, x):
+        return self.forward(x)
+
+
 class Classifier(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
@@ -52,6 +87,7 @@ class Classifier(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
             nn.BatchNorm2d(64),
             nn.LeakyReLU(0.1),
+            ChannelAttention(64),
             # Block 4: 64x14x14-> 64x14x14
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(64),

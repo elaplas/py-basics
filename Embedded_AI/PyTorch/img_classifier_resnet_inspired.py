@@ -20,7 +20,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Training parameters
 batch_size = 128
-num_epochs = 10
+num_epochs = 20
 learning_rate = 0.01
 
 transform = transforms.Compose([
@@ -36,7 +36,7 @@ print(test_dataset)
 train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, num_workers=4)
 test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, num_workers=4)
 
-class ResidualBlock(nn.module):
+class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
         self.cov1 = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=stride, padding=1)
@@ -46,12 +46,14 @@ class ResidualBlock(nn.module):
         # To addapt input either channel numbers or hxw dimenstions 
         if in_channels != out_channels or stride!=1:
             self.shortcut = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=stride, padding=0)
+        self.relu = nn.ReLU()
+        
 
     def forward(self, x):
         y = self.cov1(x)
         y = self.cov2(y)
         y = self.shortcut(x) + y
-        y = self.bn((nn.ReLU(y)))
+        y = self.bn(self.relu(y))
         return y
     
     def __call__(self, x):
@@ -64,25 +66,17 @@ class Classifier(nn.Module):
         self.num_classes = num_classes
         self.conv_layers = nn.Sequential(
             # Block 1: 1x28x28 -> 16x28x28
-            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
+            ResidualBlock(in_channels=1, out_channels=16, stride=1),
             # Block 2: 16x28x28 -> 32x14x14
-            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
+            ResidualBlock(in_channels=16, out_channels=32, stride=1),
             # Block 3: 32x14x14 -> 64x14x14
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
+            ResidualBlock(in_channels=32, out_channels=64, stride=1),
             # Block 4: 64x14x14-> 128x7x7
-            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
+            ResidualBlock(in_channels=64, out_channels=128, stride=2)
         )
 
         self.fc = nn.Sequential(
-            # Reduce to 512x1x1
+            # Reduce to 128x1x1
             nn.AdaptiveAvgPool2d(1), 
             nn.Flatten(), 
             nn.Linear(128, num_classes)

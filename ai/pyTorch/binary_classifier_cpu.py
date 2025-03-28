@@ -1,5 +1,5 @@
 # What the script does?
-# ✅ Trains a binary classifier using PyTorch on 2D points
+# ✅ Trains a binary classifier that classifies 2D points with negative y-coordinate to 0 and positive y-coordinate to 1
 # ✅ Exports the trained model to ONNX
 # ✅ Loads the ONNX model with ONNX Runtime for inference
 # ✅ Visualizes the training data & classification results
@@ -20,28 +20,35 @@ import onnx
 import onnxruntime as onnxrt
 # Provides visu
 import matplotlib.pyplot as plt
+import random
 
+## set a seed to generate deterministic set of data
 torch.manual_seed(0)
+## number of samples
 n_samples = 1000
+## generate 2D points
 data = torch.randint(-5, 5, (n_samples, 2))
+## generate indecies and shuffle them to pick data points randomly later
+indecies = [i for i in range(n_samples)]
+random.shuffle(indecies)
+indecies = np.array(indecies).reshape(len(indecies), 1)
+## split into training and test/validation 
 n_training_samples = int(n_samples * 0.8)
 n_test_samples = int(n_samples * 0.2)
-x_train = data[:n_training_samples].float()
-x_test = data[n_training_samples: n_training_samples + n_test_samples].float()
+x_train = data[indecies[:n_training_samples]].float()
+x_test = data[indecies[n_training_samples: n_training_samples + n_test_samples]].float()
 ## training GT
-condition = x_train[:, 0] < 0
-condition = condition.reshape((condition.size()[0], 1))
-y_train = condition.float()
+y_train = torch.tensor([0.0 if x_train[i,:,1] < 0 else 1.0 for i in range(x_train.shape[0])])
+y_train = y_train.reshape(x_train.shape[0], 1, 1)
 ## test GT
-condition = x_test[:, 0] < 0
-condition = condition.reshape((condition.size()[0], 1))
-y_test = condition.float()
+y_test = torch.tensor([0.0 if x_test[i,:,1] < 0 else 1.0 for i in range(x_test.shape[0])])
+y_test = y_test.reshape(y_test.shape[0], 1, 1)
 ## Create dataloader iterables
 n_epochs = 5
 batch_size = 100
 train_dataset = TensorDataset(x_train, y_train)
 train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-
+## Binary classifier 
 class BinaryClassifier(nn.Module):
     def __init__(self):
         super().__init__()
@@ -52,11 +59,14 @@ class BinaryClassifier(nn.Module):
         return self.forward(x)
     
     def forward(self, x):
+        ## ensure the input is in float
         x = x.float()
+        ## add some non-linearity
         x = torch.relu(self.fc1(x))
+        ## Squeeze the input to the range 0-1
         x = torch.sigmoid(self.fc2(x))
         return x
-
+## Calculate the accuracy of classifer
 def cal_accuracy(x: torch.tensor, y: torch.tensor):
     res = 0
     for i in range(x.size()[0]):
@@ -64,11 +74,11 @@ def cal_accuracy(x: torch.tensor, y: torch.tensor):
             res += 1
     res /= float(x.size()[0])
     return res
-
+## Instantiate model, loss function and optimizer
 model = BinaryClassifier()
 loss_fn = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.1)
-
+## Training 
 for epoch in range(n_epochs):
     for x_batch, y_batch in train_loader:
         prediction_batch = model(x_batch)

@@ -20,24 +20,36 @@ import onnx
 import onnxruntime as onnxrt
 # Provides visu
 import matplotlib.pyplot as plt
-
+import random
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.manual_seed(0)
+## set a seed to generate deterministic set of data
+torch.manual_seed(0)
+## number of samples
 n_samples = 1000
+## generate 2D points
 data = torch.randint(-5, 5, (n_samples, 2))
+## generate indecies and shuffle them to pick data points randomly later
+indecies = [i for i in range(n_samples)]
+random.shuffle(indecies)
+indecies = np.array(indecies).reshape(len(indecies), 1)
+## split into training and test/validation 
 n_training_samples = int(n_samples * 0.8)
 n_test_samples = int(n_samples * 0.2)
-x_train = data[:n_training_samples].float()
-x_test = data[n_training_samples: n_training_samples + n_test_samples].float()
-## Training GT
-condition = x_train[:, 0] < 0
-condition = condition.reshape((condition.size()[0], 1))
-y_train = condition.float()
-## Test GT
-condition = x_test[:, 0] < 0
-condition = condition.reshape((condition.size()[0], 1))
-y_test = condition.float()
+x_train = data[indecies[:n_training_samples]].float()
+x_test = data[indecies[n_training_samples: n_training_samples + n_test_samples]].float()
+## training GT
+y_train = torch.tensor([0.0 if x_train[i,:,1] < 0 else 1.0 for i in range(x_train.shape[0])])
+y_train = y_train.reshape(x_train.shape[0], 1, 1)
+## test GT
+y_test = torch.tensor([0.0 if x_test[i,:,1] < 0 else 1.0 for i in range(x_test.shape[0])])
+y_test = y_test.reshape(y_test.shape[0], 1, 1)
+## Create dataloader iterables
+n_epochs = 5
+batch_size = 100
+train_dataset = TensorDataset(x_train, y_train)
+train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
 ## Move to device
 x_train = x_train.to(device)
 x_test = x_test.to(device)

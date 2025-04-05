@@ -3,7 +3,7 @@ from PIL import Image
 import numpy as np
 import torch
 import random
-from multiprocessing import pool
+from multiprocessing import Pool
 
 class Dataset:
     def __init__(self, files_dir="", resize=(28,28)):
@@ -47,7 +47,7 @@ class DataLoader:
     def __iter__(self):
         batch_data = []
         for batch in self.__get_batch():
-            with pool(self.num_workers) as pool:
+            with Pool(self.num_workers) as pool:
                 results = pool.map(self.__load_image, batch)
             for numpyArr in results:
                 if numpyArr is not None:

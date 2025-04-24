@@ -76,7 +76,7 @@ def cal_accuracy(x: torch.tensor, y: torch.tensor):
     return res
 ## Instantiate model, loss function and optimizer
 model = BinaryClassifier()
-loss_fn = nn.MSELoss()
+loss_fn = nn.BCELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.1)
 ## Training 
 for epoch in range(n_epochs):
